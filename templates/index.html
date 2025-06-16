@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="text-center">
+    <h1 class="display-4 mb-4">Welcome to the Literature Crossword</h1>
+    <p class="lead">Test your knowledge of literary works and their motifs through this interactive crossword puzzle.</p>
+    
+    <div class="mt-5">
+        <a href="{{ url_for('play') }}" class="btn btn-primary btn-lg">Start Playing</a>
+    </div>
+</div>
+{% endblock %} 

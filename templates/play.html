@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2>Crossword Puzzle</h2>
+            <div class="btn-group" role="group">
+                <a href="{{ url_for('play', level=1) }}" 
+                   class="btn btn-outline-primary {% if current_level == 1 %}active{% endif %}">Easy</a>
+                <a href="{{ url_for('play', level=2) }}" 
+                   class="btn btn-outline-primary {% if current_level == 2 %}active{% endif %}">Medium</a>
+                <a href="{{ url_for('play', level=3) }}" 
+                   class="btn btn-outline-primary {% if current_level == 3 %}active{% endif %}">Hard</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="crossword-grid" id="crosswordGrid">
+            {% for i in range(1, 16) %}
+                {% for j in range(1, 16) %}
+                <div class="crossword-cell" data-x="{{ j }}" data-y="{{ i }}">
+                    <input type="text" maxlength="1" class="form-control">
+                </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="hint-section">
+            <h3>Across</h3>
+            <div id="acrossHints">
+                {% if words %}
+                    {% for word in words %}
+                        {% if word.orientation == 'horizontal' %}
+                        <div class="word-input mb-3">
+                            <div class="d-flex flex-column">
+                                <div class="hint-text mb-2">
+                                    {{ word.number }}. {{ word.hint }}
+                                    {% if word.show_work_info %}
+                                    <br><small class="text-muted">From '{{ word.literary_work }}' ({{ word.year }}) by {{ word.author }}</small>
+                                    {% endif %}
+                                </div>
+                                <input type="text" class="form-control" style="width: 200px;" data-word-id="{{ word.id }}" 
+                                       data-orientation="horizontal" data-start-x="{{ word.start_x }}" 
+                                       data-start-y="{{ word.start_y }}" data-length="{{ word.word|length }}"
+                                       placeholder="Length: {{ word.word|length }} letters">
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <p>No words added for this level yet. Visit the admin page to add words.</p>
+                {% endif %}
+            </div>
+
+            <h3 class="mt-4">Down</h3>
+            <div id="downHints">
+                {% if words %}
+                    {% for word in words %}
+                        {% if word.orientation == 'vertical' %}
+                        <div class="word-input mb-3">
+                            <div class="d-flex flex-column">
+                                <div class="hint-text mb-2">
+                                    {{ word.number }}. {{ word.hint }}
+                                    {% if word.show_work_info %}
+                                    <br><small class="text-muted">From '{{ word.literary_work }}' ({{ word.year }}) by {{ word.author }}</small>
+                                    {% endif %}
+                                </div>
+                                <input type="text" class="form-control" style="width: 200px;" data-word-id="{{ word.id }}" 
+                                       data-orientation="vertical" data-start-x="{{ word.start_x }}" 
+                                       data-start-y="{{ word.start_y }}" data-length="{{ word.word|length }}"
+                                       placeholder="Length: {{ word.word|length }} letters">
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <p>No words added for this level yet. Visit the admin page to add words.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="extraInfoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Additional Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="extraInfoText"></p>
+                <p class="text-muted mt-2">
+                    <small id="workInfoText"></small>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const grid = document.getElementById('crosswordGrid');
+    const cells = grid.querySelectorAll('.crossword-cell input');
+    const wordInputs = document.querySelectorAll('.word-input input');
+    const extraInfoModal = new bootstrap.Modal(document.getElementById('extraInfoModal'));
+    
+    // Initialize grid with numbers
+    {% for word in words %}
+    const cell{{ word.id }} = grid.querySelector(`[data-x="{{ word.start_x }}"][data-y="{{ word.start_y }}"]`);
+    if (cell{{ word.id }}) {
+        const existingContent = cell{{ word.id }}.innerHTML;
+        const numberSpan = `<span class="cell-number">{{ word.number }}</span>`;
+        if (!existingContent.includes(numberSpan)) {
+            cell{{ word.id }}.innerHTML = numberSpan + existingContent;
+        }
+    }
+    {% endfor %}
+
+    // Handle word input changes
+    wordInputs.forEach(input => {
+        input.addEventListener('input', function() {
+            const wordId = this.dataset.wordId;
+            const orientation = this.dataset.orientation;
+            const startX = parseInt(this.dataset.startX);
+            const startY = parseInt(this.dataset.startY);
+            const value = this.value;
+            
+            // Update grid cells
+            for (let i = 0; i < parseInt(this.dataset.length); i++) {
+                const x = orientation === 'horizontal' ? startX + i : startX;
+                const y = orientation === 'horizontal' ? startY : startY + i;
+                const cell = grid.querySelector(`[data-x="${x}"][data-y="${y}"] input`);
+                if (cell) {
+                    cell.value = value[i] || '';
+                }
+            }
+
+            // Check if word is complete
+            if (value.length === parseInt(this.dataset.length)) {
+                checkWord(wordId, value);
+            }
+        });
+    });
+
+    // Handle grid cell input
+    cells.forEach(cell => {
+        cell.addEventListener('input', function() {
+            // Update all word inputs that contain this cell
+            updateWordInputs();
+            
+            // Check all words that contain this cell
+            checkAllWords();
+        });
+    });
+
+    function updateWordInputs() {
+        wordInputs.forEach(input => {
+            const orientation = input.dataset.orientation;
+            const startX = parseInt(input.dataset.startX);
+            const startY = parseInt(input.dataset.startY);
+            let word = '';
+            
+            for (let i = 0; i < parseInt(input.dataset.length); i++) {
+                const x = orientation === 'horizontal' ? startX + i : startX;
+                const y = orientation === 'horizontal' ? startY : startY + i;
+                const cell = grid.querySelector(`[data-x="${x}"][data-y="${y}"] input`);
+                if (cell) {
+                    word += cell.value || '';
+                }
+            }
+            
+            input.value = word;
+        });
+    }
+
+    function checkAllWords() {
+        wordInputs.forEach(input => {
+            const wordId = input.dataset.wordId;
+            const value = input.value;
+            if (value.length === parseInt(input.dataset.length)) {
+                checkWord(wordId, value);
+            }
+        });
+    }
+
+    function checkWord(wordId, value) {
+        {% for word in words %}
+        if (wordId === "{{ word.id }}" && value.toUpperCase() === "{{ word.word|upper }}") {
+            const extraInfoText = document.getElementById('extraInfoText');
+            const workInfoText = document.getElementById('workInfoText');
+            
+            extraInfoText.textContent = "{{ word.extra_info }}";
+            workInfoText.textContent = "From '{{ word.literary_work }}' ({{ word.year }}) by {{ word.author }}";
+            
+            // Only show modal if there's extra info to display
+            if ("{{ word.extra_info }}" || "{{ word.show_work_info }}") {
+                extraInfoModal.show();
+            }
+        }
+        {% endfor %}
+    }
+});
+</script>
+{% endblock %} 
